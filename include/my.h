@@ -1,126 +1,107 @@
 /*
-** EPITECH PROJECT, 2025
-** my_strstr
+** EPITECH PROJECT, 2026
+** minishell2
 ** File description:
-** Header file for my_strstr and helpers
+** Write a UNIX command interpreter.
 */
 
-#ifndef MY_H
-    #define MY_H
-    #define NEW_LIGNE my_putchar('\n')
-    #define ABS(value) (((value) < 0) ? ((value) * -1) : (value))
-    #include <stdarg.h>
-    #include <stdlib.h>
-    #include <stdint.h>
-    #include <unistd.h>
-    #include <stddef.h>
-    #include <limits.h>
+#ifndef MINISHELL_H
+    #define MINISHELL_H
+    #define _XOPEN_SOURCE 700
+    #define SUCCESS 0
+    #define FAILURE 84
+    #include "utilslib.h"
+    #include <signal.h>
+    #include <dirent.h>
+    #include <errno.h>
+    #include <sys/wait.h>
+    #include <sys/signalfd.h>
 
 // === TYPEDEFS ===
-    // Arguments stock
-typedef struct arguments_s{
-    char conversion;
-    int precision;
-    int width;
-    char *len_modifier;
-    char *flags;
-} arguments_t;
+typedef struct shell_s {
+    int loop;
+    char **envp;
+    char *last_path;
+} shell_t;
 
-typedef struct index_arguments_s{
-    int i_conversion;
-    int i_precision;
-    int i_width;
-    int i_len_modifier;
-    int i_flags;
-} index_arguments_t;
+typedef struct redirection_s {
+    int is;
+    char *ordr;
+    char *irdr;
+    int addo;
+    int addi;
+    int effect_pid;
+    int heredoc_fd[2];
+} redirection_t;
 
-    // Format buffer
-typedef struct format_s {
-    char *str;
-    int len;
-    char conv;
-    int precision;
-    va_list *list;
-    int *i;
-    int is_zero_flag;
-    int is_plus_flag;
-    int is_minus_flag;
-    int is_hashtag_flag;
-    char *len_modifier;
-} format_t;
+typedef struct pipeline_ctx_s {
+    int (*pipes)[2];
+    int pipe_fail;
+    int nb_pipes;
+    pid_t *pids;
+    int nb_pid;
+    int curr_pid;
+    redirection_t *rdr;
+} pipeline_ctx_t;
 
-    // Arguments function pointers
-typedef struct conversion_table_s{
-    char conversion;
-    void (*func)(format_t *fmt);
-} conversion_table_t;
+typedef struct params_s {
+    shell_t sh;
+    pipeline_ctx_t execs;
+} params_t;
 
-typedef struct len_modifier_table_s{
-    char *lm;
-    void (*func)(format_t *fmt);
-} len_modifier_table_t;
+typedef struct commands_s {
+    char *command;
+    int (*function)(params_t *, char **);
+} commands_t;
 
-typedef struct flags_table_s{
-    char flags;
-    void (*func)(format_t *fmt);
-} flags_table_t;
-
-// === AUX FUNCTIONS ===
-char *my_strcpy(char *dest, char const *src);
-char *convert_base(char const *nbr, char const *base_from, char const *base_to);
-char *my_revstr(char *str);
-char *my_strncat(char *dest, char const *src, int nb);
-char *my_strcat(char *dest, char const *src);
-char *my_strdup(char const *src);
-char *delete_zeros(char *str);
-int my_putstr(char const *str);
-int my_strlen(char const *str);
-int my_getnbr(char const *str);
-int my_strcmp(char const *s1, char const *s2);
-int my_power(long long nb, int p);
-double my_power_double(double nb, int p);
-void my_putchar(char c);
-
-// === ARGUMENTS DETECTION ===
-    // Extraction
-char *extract_flags(const char *format, index_arguments_t *i_args);
-char *extract_len_modifier(const char *format, index_arguments_t *i_args);
-int extract_width(const char *format, index_arguments_t *i_args);
-int extract_precision(const char *format, index_arguments_t *i_args,
-    format_t *fmt);
-
-    // Index detection
-int detect_conversion(const char *format, format_t *fmt);
-int detect_flags(const char *format, format_t *fmt);
-int detect_len_modifier(const char *format, format_t *fmt);
-int detect_width(const char *format, format_t *fmt);
-int detect_precision(const char *format, format_t *fmt);
-
-    // Process
-void process_flags(arguments_t *args, format_t *fmt);
-void process_modifier(arguments_t *args, format_t *fmt);
-void process_precision(arguments_t *args, format_t *fmt);
-void process_width(arguments_t *args, format_t *fmt);
-void process_conversion(arguments_t *args, format_t *fmt);
-
-    // Else
-int in_possible_flags(char c);
+typedef struct function_pipe_s {
+    int (*function)(params_t *, char **);
+    char **array;
+} function_pipe_t;
 
 // === FUNCTIONS ===
-    // Putnbr
-char *putnbrs(intmax_t nb);
-char *putnbr_unsigned(uintmax_t nb);
+    // MAIN
+int minishell(int ac, char **envp);
 
-// === MAIN ===
-int my_printf(const char *format, ...);
-int error_detect(const char *format, index_arguments_t *i_args, format_t *fmt);
+    // FREE_ALLOC       | ALLOCATION AND FREE
+void free_pipeline(params_t *params);
+void reset_pipeline(pipeline_ctx_t *pipeline);
+params_t set_param(void);
+int set_program(params_t *params, char **envp);
+char **copy_env(char **envp);
 
-// == CONV BIS ===
-void a_conv(format_t *fmt);
-void p_conv(format_t *fmt);
-void n_conv(format_t *fmt);
-void e_conv(format_t *fmt);
-void g_conv(format_t *fmt);
-void percent_conv(format_t *fmt);
+    // PARSING          | PARSING FUNCTIONS
+        // ALLOC_FREE_ERRORS
+char **operators(params_t *params, char *input);
+        // LOGIC
+int redirection_operators(params_t *params, char **commands, int curr);
+void save_heredoc(params_t *params, int curr);
 
-#endif /* !!!!MY_H */
+    // CUT COMMAND      | SPECIFICS HELPERS
+char **str_to_array(char *str);
+
+    // ENV              | ENVIRONMENT FUNCTIONS
+char *get_value_env(char *needle, char **haystack);
+int change_value_env(char *needle, char ***haystack, char *change);
+int unset_value_env(char *needle, char ***env);
+
+    // COMMANDS         | EXECUTION OF A COMMAND (BUILTIN/PATH/FILE)
+int command_handler(params_t *params, char *request, int i);
+void errno_messages(char *cmd, int from_cd);
+
+    // BUILTINS         | BUILTINS FUNCTIONS
+int c_cd(params_t *params, char **command);
+int c_env(params_t *params, char **command);
+int c_setenv(params_t *params, char **command);
+int c_unsetenv(params_t *params, char **command);
+int c_exit(params_t *params, char **command);
+
+    // EXECUTE          | CHILD & PARENTS PROCESS
+        // CHILD
+void child_process(params_t *params, char **command, char *comm,
+    function_pipe_t *func);
+        // PARENT
+int use_execve(params_t *params, char **command, function_pipe_t *func);
+int parents_process(pid_t pid);
+
+#endif /* MINISHELL_H */

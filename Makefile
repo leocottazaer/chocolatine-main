@@ -1,63 +1,128 @@
 ##
-## EPITECH PROJECT, 2025
-## Makefile my_printf
+## EPITECH PROJECT, 2026
+## minishell
 ## File description:
-## Makefile my_printf
+## Makefile minishell
 ##
 
-.PHONY: all clean fclean re tests_run unit_tests
+# ─────────────────────────────────────────────────────────────
+# PHONY TARGETS
+# ─────────────────────────────────────────────────────────────
+.PHONY: all clean fclean re unit_tests tests_run functional_tests compile_lib compile_lib_all
 
-SRC = src/my_printf.c \
-      src/arguments_detect/conversions.c \
-      src/arguments_detect/error_detect.c \
-      src/arguments_detect/flags.c \
-      src/arguments_detect/length_operators.c \
-      src/arguments_detect/precision.c \
-      src/arguments_detect/width.c \
-      src/aux/convert_base.c \
-      src/aux/my_compute_power_rec.c \
-      src/aux/my_getnbr.c \
-      src/aux/my_putchar.c \
-      src/aux/my_putstr.c \
-      src/aux/my_revstr.c \
-      src/aux/my_strcat.c \
-      src/aux/my_strcmp.c \
-      src/aux/my_strcpy.c \
-      src/aux/my_strdup.c \
-      src/aux/my_strlen.c \
-      src/aux/my_strncat.c \
-      src/func/for_conversions_bis.c \
-      src/func/for_conversions.c \
-      src/func/for_flags.c \
-      src/func/e_conv.c \
-      src/func/g_conv.c \
-      src/func/putnbr.c
+# ─────────────────────────────────────────────────────────────
+# NAME
+# ─────────────────────────────────────────────────────────────
+NAME 		= mysh
 
-OBJ = $(SRC:.c=.o)
+# ─────────────────────────────────────────────────────────────
+# SOURCE FILES AND OBJECT FILES
+# ─────────────────────────────────────────────────────────────
+SRC 		= src/minishell.c \
+			  src/free_alloc.c \
+			  src/parsing/alloc_launch_errors.c \
+			  src/parsing/logic.c \
+			  src/commands_handling/commands.c \
+			  src/commands_handling/env.c \
+			  src/commands_handling/builtins.c \
+			  src/execute/child_proc.c \
+			  src/execute/parent_proc.c
+SRC_MAIN	= src/main.c
+SRC_TEST 	= tests/test_tool.c \
+			  tests/test_env.c \
+			  tests/test_commands.c \
+			  tests/test_parsing.c
+OBJ 		:= $(patsubst %.c,%.o,$(SRC))
+OBJ_MAIN	:= $(patsubst %.c,%.o,$(SRC_MAIN))
+OBJ_TEST 	:= $(patsubst %.c,%.o,$(SRC_TEST))
 
-NAME = libmy.a
+# ────────────────────────────────────────────────────────────
+# COMPILER
+# ─────────────────────────────────────────────────────────────
+CC			= epiclang
 
-REMOVE = rm -f
+# ─────────────────────────────────────────────────────────────
+# COMPILATION FLAGS & LIBS
+# ─────────────────────────────────────────────────────────────
+CFLAGS      = -Wall -Wextra -g3 -Iinclude -O0 -fno-builtin
+LDFLAGS 	= -L./ -lUtilsLib
 
-all: $(NAME)
+# ─────────────────────────────────────────────────────────────
+# TEST FLAGS & LIBS
+# ─────────────────────────────────────────────────────────────
+TEST_FLAGS  = --coverage
+TEST_LIBS   = -lcriterion
 
-$(NAME): $(OBJ)
-	ar rcs $(NAME) $(OBJ)
+# ─────────────────────────────────────────────────────────────
+# TOOLS
+# ─────────────────────────────────────────────────────────────
+REMOVE 		= rm -f -r
+RM_FILES 	= "*.gcno" "*.gcda" "*.html" "*.css" \
+			  "*.gcov" "*.log" ".out" "*.o" "*.swp"
 
+# ─────────────────────────────────────────────────────────────
+# BUILDING RULES
+# ─────────────────────────────────────────────────────────────
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 							      BINARY BUILDING
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+all: compile_lib $(NAME)
+
+$(NAME): $(OBJ) $(OBJ_MAIN)
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 							      LIB COMPILATION
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compile_lib_all:
+	cd lib && make re && cp libUtilsLib.a ../ && cd ../
+
+compile_lib:
+	cd lib && make && cp libUtilsLib.a ../ && cd ../
+
+# ─────────────────────────────────────────────────────────────
+# CLEANING RULES
+# ─────────────────────────────────────────────────────────────
 clean:
-	$(REMOVE) $(OBJ)
+	$(REMOVE) $(OBJ) $(OBJ_MAIN) $(OBJ_TEST)
 
 fclean: clean
-	$(REMOVE) $(NAME)
-	$(REMOVE) unit_tests
-	$(REMOVE) a.out
-	$(REMOVE) *.gcno
-	$(REMOVE) *.gcda
+	$(REMOVE) $(NAME) unit_tests functional_tests ncurses_state libUtilsLib.a hello armbin segf fpe
+	for f in $(RM_FILES); do find . -name "$$f" -delete; done
+	cd lib && make fclean && cd ../
 
-re: fclean $(NAME)
+re: fclean compile_lib_all all
 
-unit_tests: fclean $(NAME)
-	cc -o unit_tests $(SRC) tests/tests.c --coverage -lcriterion -L./ -lmy -g3
+# ─────────────────────────────────────────────────────────────
+# TESTING RULES
+# ─────────────────────────────────────────────────────────────
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 							  UNIT TESTS BUILDING
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+unit_tests: CC = gcc
+unit_tests: CFLAGS += $(TEST_FLAGS)
+unit_tests: LDFLAGS += $(TEST_LIBS)
+unit_tests: $(OBJ) $(OBJ_TEST)
+	$(CC) -o unit_tests $^ $(LDFLAGS) $(TEST_FLAGS)
 
-tests_run: unit_tests
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# 						FUNCTIONAL TESTS BUILDING
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+functional_tests: CC = gcc
+functional_tests: CFLAGS += $(TEST_FLAGS)
+functional_tests: LDFLAGS += $(TEST_LIBS)
+functional_tests: $(OBJ) $(OBJ_MAIN)
+	$(CC) -o functional_tests $^ $(LDFLAGS) $(TEST_FLAGS)
+
+# ─────────────────────────────────────────────────────────────
+# RUN TESTS AND GENERATE COVERAGE REPORT
+# ─────────────────────────────────────────────────────────────
+tests_run: CC = gcc
+tests_run: fclean compile_lib unit_tests functional_tests
 	./unit_tests
+	./tests/tests.sh
+	gcovr -b --exclude-directories tests --html-details -o coverage_report.html
+	@echo "Coverage report generated: coverage_report.html"
