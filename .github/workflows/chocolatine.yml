@@ -40,10 +40,10 @@ jobs:
 
       - name: Compile Project
         env:
-          CC: epiclang
+          CC: clang++
         run: |
           make 2> coding-style-reports.log
-          make run_tests 2>> coding-style-reports.log
+          make tests_run 2>> coding-style-reports.log
         timeout-minutes: 2
 
       - name: Run Coding style
@@ -87,7 +87,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
       - name: Run Unit Tests
-        run: make run_tests
+        run: make tests_run
         timeout-minutes: 2
       - name: Clean Project
         run: make fclean
