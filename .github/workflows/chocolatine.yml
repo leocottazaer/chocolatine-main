@@ -10,8 +10,8 @@ on:
       - 'no-ga/**'
 
 env:
-  MIRROR_SSH_URL: "git@github.com:EpitechPGE1-2025/G-DOP-200-LYN-2-1-chocolatine-17.git"
-  EXECUTABLES: "my_bin;unit_tests"
+  MIRROR_SSH_URL: "git@github.com:leocottazaer/chocolatine_mirror.git"
+  EXECUTABLES: "mysh"
 
 jobs:
   check_coding_style_and_compilation:
