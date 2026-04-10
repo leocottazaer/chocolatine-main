@@ -1,58 +1,108 @@
-name: Chocolatey
-
-env:
-  MIRROR_SSH_URL: ${{ vars.MIRROR_SSH_URL }}
-  EXECUTABLES: mysh
+name: chocolatine
 
 on:
   push:
     branches-ignore:
       - 'no-ga/**'
   pull_request:
+    types: [opened, reopened]
     branches-ignore:
       - 'no-ga/**'
 
+env:
+  MIRROR_SSH_URL: "git@github.com:EpitechPGE1-2025/G-DOP-200-LYN-2-1-chocolatine-17.git"
+  EXECUTABLES: "my_bin;unit_tests"
+
 jobs:
-    check_compilation_and_coding_style:
-      if: github.repository_owner != 'EpitechPGE1-2025'
-      runs-on: ubuntu-latest
-      container:
-        image: epitechcontent/epitest-docker
-      steps:
-        - uses: actions/checkout@v6
+  check_coding_style_and_compilation:
+    runs-on: ubuntu-latest
+    container: epitechcontent/epitest-docker
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-        - name: coding style
-          run: banana-check-report .
+      - name: Run Coding Style
+        run: |
+          banana-check-repo . > coding-style-reports.log
+          if grep -q "\[Banana\]" coding-style-reports.log; then
+            sed -i '1d' coding-style-reports.log
+            while read -r LINE_CONTENT; do
+              FILE=$(echo "$LINE_CONTENT" | cut -d':' -f1)
+              FILE=${FILE#./}
+              LEVEL=$(echo "$LINE_CONTENT" | cut -d'[' -f3 | cut -d']' -f1)
+              DESC=$(echo "$LINE_CONTENT" | cut -d']' -f3 | cut -d'(' -f1 | sed 's/^ //;s/ $//')
+              CODE=$(echo "$LINE_CONTENT" | grep -oP '\(\K[^\)]+' )
+              TITLE="$LEVEL coding style error"
+              echo "::error file=$FILE,line=0,title=$TITLE::$CODE - $DESC"
+            done < coding-style-reports.log
+            exit 1
+          fi
 
-        - name: Build
-          timeout-minutes: 2
-          run: make CC=epiclang
+      - name: Compile Project
+        env:
+          CC: epiclang
+        run: |
+          make 2> coding-style-reports.log
+          make run_tests 2>> coding-style-reports.log
+        timeout-minutes: 2
 
-        - name: Clean
-          run: make clean
-        - name: verif_executable
-          run: |
-            for executable in $(echo $EXECUTABLES | tr ',' ' '); do
-              test -x $executable || exit 1;
-            done
-    run_tests:
-      needs: check_compilation_and_coding_style
-      runs-on: ubuntu-latest
-      container:
-        image: epitechcontent/epitest-docker
-      steps:
-        - uses: actions/checkout@v6
+      - name: Run Coding style
+        shell: bash
+        run: |
+          if grep -q "\[Banana\]" coding-style-reports.log; then
+            while read -r LINE_CONTENT; do
+              if [[ "$LINE_CONTENT" == *"[Banana]"* ]]; then
+                FILE_LINE=$(echo "$LINE_CONTENT" | cut -d':' -f1,2)
+                FILE=${FILE_LINE%:*}; FILE=${FILE#./}
+                LINE=${FILE_LINE#*:}
+                LEVEL=$(echo "$LINE_CONTENT" | cut -d'[' -f3 | cut -d']' -f1)
+                CODE=$(echo "$LINE_CONTENT" | grep -oP '\(\K[^\)]+')
+                DESC=$(echo "$LINE_CONTENT" | cut -d']' -f3 | cut -d'(' -f1 | sed 's/^ //;s/ $//')
+                TITLE="$LEVEL coding style error"
+                echo "::error file=$FILE,line=$LINE,title=$TITLE::$CODE - $DESC"
+              fi
+            done < coding-style-reports.log
+            exit 1
+          fi
 
-        - name: run_tests
-          timeout-minutes: 2
-          run: make tests_run
-    push_to_mirror:
-      needs: run_tests
-      if: github.event_name == 'push'
-      runs-on: ubuntu-latest
-      steps:
-        - uses: pixta-dev/repository-mirroring-action@v1.1.1
+      - name: Verify Executables existence and permissions
+        shell: bash
+        run: |
+          for exec in ${EXECUTABLES//;/ }; do
+            if [ ! -x "$exec" ]; then
+              echo "::error title=Binary Error::$exec does not exist or is not executable"
+              exit 1
+            fi
+          done
+      - name: Clean Project
+        run: |
+          make fclean
+          rm -f coding-style-reports.log
 
-          with:
-            target_repo_url: ${{ env.MIRROR_SSH_URL }}
-            ssh_private_key: ${{ secrets.GIT_SSH_PRIVATE_KEY }}
+  run_tests:
+    runs-on: ubuntu-latest
+    container: epitechcontent/epitest-docker
+    needs: check_coding_style_and_compilation
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Run Unit Tests
+        run: make run_tests
+        timeout-minutes: 2
+      - name: Clean Project
+        run: make fclean
+
+  push_to_mirror:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.repository != 'EpitechPGE1-2025/G-DOP-200-LYN-2-1-chocolatine-17'
+    needs: run_tests
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Mirror to Epitech
+        uses: pixta-dev/repository-mirroring-action@v1
+        with:
+          target_repo_url: ${{ env.MIRROR_SSH_URL }}
+          ssh_private_key: ${{ secrets.GIT_SSH_PRIVATE_KEY }}
