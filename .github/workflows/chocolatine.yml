@@ -25,10 +25,11 @@ jobs:
           fetch-depth: 0
 
       - name: Check coding style
-        run: banana-check-repo
+        run: banana-check-repo .
 
       - name: Display style errors
         run: |
+          touch coding-style-reports.log
           while read line; do
             FILE=$(echo "$line" | cut -d':' -f1)
             LINE=$(echo "$line" | cut -d':' -f2)
@@ -50,6 +51,7 @@ jobs:
         run: make clean
 
       - name: Check executables
+        shell: bash
         run: |
           IFS=',' read -ra ADDR <<< "$EXECUTABLES"
           for exe in "${ADDR[@]}"; do
@@ -74,7 +76,7 @@ jobs:
   push_to_mirror:
     runs-on: ubuntu-latest
     needs: run_tests
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.repository != 'EpitechPGE1-2025/G-DOP-200-LYN-2-1-chocolatine-1'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
