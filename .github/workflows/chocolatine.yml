@@ -40,7 +40,7 @@ jobs:
 
       - name: Compile Project
         env:
-          CC: clang++
+          CC: epiclang
         run: |
           make 2> coding-style-reports.log
           make tests_run 2>> coding-style-reports.log
