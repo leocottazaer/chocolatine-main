@@ -9,8 +9,8 @@ on:
       - "no-ga/**"
 
 env:
-  MIRROR_SSH_URL: ""
-  EXECUTABLES: "mysh"
+  MIRROR_SSH_URL: ${{ vars.MIRROR_SSH_URL }}
+  EXECUTABLES: ${{ vars.EXECUTABLES }}
 
 jobs:
   check_if_workflow_should_run:
