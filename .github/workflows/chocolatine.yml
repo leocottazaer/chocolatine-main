@@ -1,151 +1,102 @@
-name: Chocolatine Integration
+name: chocolatine
 
 on:
   push:
-    branches-ignore:
-      - "no-ga/**"
   pull_request:
-    branches-ignore:
-      - "no-ga/**"
 
 env:
-  MIRROR_SSH_URL: ${{ vars.MIRROR_SSH_URL }}
-  EXECUTABLES: ${{ vars.EXECUTABLES }}
+  EXECUTABLES: "binary"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  check_if_workflow_should_run:
-    name: Checks if the workflow should run
+  check_compilation_and_coding_style:
+    name: Check compilation and coding style
+    if: ${{ !startsWith(github.ref, 'refs/heads/no-ga/') && github.repository != 'EpitechPGE1-2025/G-DOP-200-LYN-2-1-chocolatine-11' }}
     runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check_if_repository_is_mirror.outputs.should_run }}
+
+    container:
+      image: epitechcontent/epitest-docker
+
+    env:
+      CC: epiclang
+
     steps:
-      - name: Checking if the repository is the mirror repository
-        id: check_if_repository_is_mirror
-        shell: bash
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run banana coding style check
         run: |
-          if [[ $MIRROR_SSH_URL =~ $GITHUB_REPOSITORY ]]; then
-            echo "The repository is the mirror repository"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_run=true" >> $GITHUB_OUTPUT
+          banana-check-repo . 2>&1 | tee banana.log
+
+      - name: Display coding style errors
+        run: |
+          if grep -q "\[Banana\]" banana.log; then
+            echo "Banana coding style errors detected:"
+            grep "\[Banana\]" banana.log | while IFS= read -r line; do
+              file=$(echo "$line" | cut -d ':' -f1)
+              echo "::error file=$file::$line"
+            done
+            exit 1
           fi
 
-  check_compilation_and_coding_style:
-    name: Checks compilation and coding style compliance
-    needs: [check_if_workflow_should_run]
-    if: ${{ needs.check_if_workflow_should_run.outputs.should_run == 'true' }}
-    runs-on: ubuntu-latest
-    container: epitechcontent/epitest-docker:latest
-    steps:
-      - name: Fetching repository
-        uses: actions/checkout@v6
-
-      - name: Running banana-check-repo
-        id: running_banana_check_repo
-        run: |
-          echo "report<<EOF" >> $GITHUB_OUTPUT
-          (banana-check-repo || exit 0) >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Running make command
-        id: running_make
-        shell: bash
-        run: |
-          set -o pipefail
-          CC=epiclang make 2>&1 | tee make.log
-          echo "report<<EOF" >> $GITHUB_OUTPUT
-          cat make.log >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Compile project
+        run: make
         timeout-minutes: 2
 
-      - name: Initializing FAIL_TASK environment variable
+      - name: Check executables
         run: |
-          echo "FAIL_TASK=false" >> "$GITHUB_ENV"
-
-      - name: Displaying banana-check-repo script coding style infringements as error annotations
-        shell: bash
-        run: |
-          REPORT='${{ steps.running_banana_check_repo.outputs.report }}'
-          IFS='
-          '
-          for ERROR in $REPORT; do
-            if [[ $ERROR =~ \[Banana\] ]]; then
-              echo "FAIL_TASK=true" >> "$GITHUB_ENV"
-              FILE=$(echo $ERROR | cut -d ':' -f 1)
-              LEVEL=$(echo $ERROR | cut -d '[' -f 3 | cut -d ']' -f 1)
-              RULE=$(echo $ERROR | cut -d '(' -f 2 | cut -d ')' -f 1)
-              DETAIL=$(echo $ERROR | cut -d ']' -f 3 | cut -d '(' -f 1 | xargs)
-              echo "::error file=${FILE},title=${LEVEL} coding style error::${RULE} - ${DETAIL}"
+          for exe in $(echo $EXECUTABLES | tr ',' ' '); do
+            if [ ! -f "$exe" ] || [ ! -x "$exe" ]; then
+              echo "::error file=$exe::Binary not found or not executable"
+              exit 1
             fi
           done
 
-      - name: Displaying make command coding style infringements as error annotations
-        shell: bash
-        run: |
-          REPORT='${{ steps.running_make.outputs.report }}'
-          IFS='
-          '
-          for ERROR in $REPORT; do
-            if [[ $ERROR =~ \[Banana\] ]]; then
-              echo "FAIL_TASK=true" >> "$GITHUB_ENV"
-              FILE=$(echo $ERROR | cut -d ':' -f 1)
-              LINE=$(echo $ERROR | cut -d ':' -f 2)
-              LEVEL=$(echo $ERROR | cut -d '[' -f 3 | cut -d ']' -f 1)
-              RULE=$(echo $ERROR | cut -d '(' -f 2 | cut -d ')' -f 1)
-              DETAIL=$(echo $ERROR | cut -d ']' -f 3 | cut -d '(' -f 1 | xargs)
-              echo "::error file=${FILE},line=${LINE},title=${LEVEL} coding style error::${RULE} - ${DETAIL}"
-            fi
-          done
-      - name: Failing if there are any coding style errors
-        if: env.FAIL_TASK == 'true'
-        run: exit 1
-
-      - run: make clean
-
-      - name: Verifies that files are present and executable
-        run: |
-          echo "FAIL_TASK=false" >> "$GITHUB_ENV"
-          SEARCH_BINARIES="${{ env.EXECUTABLES }}"
-          IFS=$','
-          for BIN in $SEARCH_BINARIES; do
-              if [ ! -f "${BIN}" ]; then
-                  echo "::error file=${BIN},title=Binary not found::${BIN}"
-                  echo "FAIL_TASK=true" >> "$GITHUB_ENV"
-              elif [ ! -x "${BIN}" ]; then
-                  echo "::error file=${BIN},title=Binary not executable::${BIN}"
-                  echo "FAIL_TASK=true" >> "$GITHUB_ENV"
-              fi
-          done
-      - name: Fail if needed
-        if: env.FAIL_TASK == 'true'
-        run: exit 1
+      - name: Clean project
+        run: make fclean
 
   run_tests:
-    name: Checks that all the tests pass
-    needs: [check_compilation_and_coding_style]
+    name: Run tests
+    needs: check_compilation_and_coding_style
+    if: ${{ !startsWith(github.ref, 'refs/heads/no-ga/') && github.repository != 'EpitechPGE1-2025/G-DOP-200-LYN-2-1-chocolatine-11' }}
     runs-on: ubuntu-latest
-    container: epitechcontent/epitest-docker:latest
-    steps:
-      - name: Fetching repository
-        uses: actions/checkout@v6
 
-      - name: Running tests using "make tests_run"
+    container:
+      image: epitechcontent/epitest-docker
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run tests
         run: make tests_run
         timeout-minutes: 2
 
   push_to_mirror:
-    name: Pushes the current repository files to a given mirror repository
-    needs: [run_tests]
-    if: ${{ github.event_name == 'push' }}
+    name: Push to mirror
+    needs: run_tests
+    if: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/no-ga/') && github.repository != 'EpitechPGE1-2025/G-DOP-200-LYN-2-1-chocolatine-11' }}
     runs-on: ubuntu-latest
+
     steps:
-      - name: Fetching repository
-        uses: actions/checkout@v6
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Push mirror repository
+      - name: Check MIRROR_SSH_URL
+        run: |
+          if [ -z "${{ secrets.MIRROR_SSH_URL }}" ]; then
+            echo "MIRROR_SSH_URL is not set. Skipping push."
+            exit 0
+          fi
+
+      - name: Mirror repository
         uses: pixta-dev/repository-mirroring-action@v1
         with:
-          target_repo_url: ${{ env.MIRROR_SSH_URL }}
+          target_repo_url: ${{ secrets.MIRROR_SSH_URL }}
           ssh_private_key: ${{ secrets.GIT_SSH_PRIVATE_KEY }}
